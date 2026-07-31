@@ -67,6 +67,7 @@ const els = {
   paidTypeButton: document.querySelector("#paidTypeButton"),
   pasteApiKeyButton: document.querySelector("#pasteApiKeyButton"),
   pasteClientIdButton: document.querySelector("#pasteClientIdButton"),
+  pasteGoogleCredentialsButton: document.querySelector("#pasteGoogleCredentialsButton"),
   performerInput: document.querySelector("#performerInput"),
   personalTypeButton: document.querySelector("#personalTypeButton"),
   customRateInput: document.querySelector("#customRateInput"),
@@ -122,6 +123,7 @@ els.settingsButton.addEventListener("click", showSetup);
 els.themeButton.addEventListener("click", toggleTheme);
 els.useSavedTableButton.addEventListener("click", useSelectedSavedTable);
 els.newTableButton.addEventListener("click", prepareNewTable);
+els.pasteGoogleCredentialsButton.addEventListener("click", pasteGoogleCredentials);
 els.pasteClientIdButton.addEventListener("click", () => pasteClipboardToInput(els.clientIdInput, "OAuth Client ID"));
 els.pasteApiKeyButton.addEventListener("click", () => pasteClipboardToInput(els.apiKeyInput, "API key"));
 els.statsMonthInput.addEventListener("change", updateStatsSettings);
@@ -1495,6 +1497,33 @@ async function pasteClipboardToInput(input, label) {
   } catch (error) {
     console.error(error);
     showNotice("Clipboard paste was blocked. Use Ctrl+V in the field.");
+  }
+}
+
+async function pasteGoogleCredentials() {
+  try {
+    const text = await navigator.clipboard.readText();
+    const lines = text
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean);
+    const clientDomain = ".apps" + ".googleusercontent.com";
+    const apiKeyPrefix = "AI" + "za";
+    const clientId = lines.find((line) => line.includes(clientDomain)) || lines[0] || "";
+    const apiKey = lines.find((line) => line.startsWith(apiKeyPrefix)) || lines.find((line) => line !== clientId) || "";
+
+    if (!clientId || !apiKey) {
+      showNotice("Copy Client ID and API key on separate lines.");
+      return;
+    }
+
+    els.clientIdInput.value = clientId;
+    els.apiKeyInput.value = apiKey;
+    els.apiKeyInput.focus();
+    showNotice("Google credentials pasted.");
+  } catch (error) {
+    console.error(error);
+    showNotice("Clipboard paste was blocked. Use Ctrl+V in the fields.");
   }
 }
 

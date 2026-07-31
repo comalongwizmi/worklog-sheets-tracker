@@ -136,6 +136,11 @@ h2 {
   color: white;
 }
 
+.full-button {
+  margin: 10px 0 14px;
+  width: 100%;
+}
+
 .entry-layout {
   align-items: start;
   display: grid;
