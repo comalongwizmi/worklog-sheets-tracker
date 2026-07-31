@@ -254,10 +254,16 @@
           <summary>Google credentials</summary>
 
           <label for="clientIdInput">Google OAuth Client ID</label>
-          <input id="clientIdInput" type="text" placeholder="Paste your OAuth Client ID">
+          <div class="credential-row">
+            <input id="clientIdInput" type="text" placeholder="Paste your OAuth Client ID">
+            <button id="pasteClientIdButton" class="secondary-button" type="button">Paste</button>
+          </div>
 
           <label for="apiKeyInput">Google API key</label>
-          <input id="apiKeyInput" type="text" placeholder="Paste your API key">
+          <div class="credential-row">
+            <input id="apiKeyInput" type="text" placeholder="Paste your API key">
+            <button id="pasteApiKeyButton" class="secondary-button" type="button">Paste</button>
+          </div>
         </details>
 
         <label for="sheetNameInput">Table name</label>

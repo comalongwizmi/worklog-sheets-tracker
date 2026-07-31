@@ -65,6 +65,8 @@ const els = {
   noticeDialog: document.querySelector("#noticeDialog"),
   noticeText: document.querySelector("#noticeText"),
   paidTypeButton: document.querySelector("#paidTypeButton"),
+  pasteApiKeyButton: document.querySelector("#pasteApiKeyButton"),
+  pasteClientIdButton: document.querySelector("#pasteClientIdButton"),
   performerInput: document.querySelector("#performerInput"),
   personalTypeButton: document.querySelector("#personalTypeButton"),
   customRateInput: document.querySelector("#customRateInput"),
@@ -120,6 +122,8 @@ els.settingsButton.addEventListener("click", showSetup);
 els.themeButton.addEventListener("click", toggleTheme);
 els.useSavedTableButton.addEventListener("click", useSelectedSavedTable);
 els.newTableButton.addEventListener("click", prepareNewTable);
+els.pasteClientIdButton.addEventListener("click", () => pasteClipboardToInput(els.clientIdInput, "OAuth Client ID"));
+els.pasteApiKeyButton.addEventListener("click", () => pasteClipboardToInput(els.apiKeyInput, "API key"));
 els.statsMonthInput.addEventListener("change", updateStatsSettings);
 els.statsHalfSelect.addEventListener("change", updateStatsSettings);
 els.statsLastThreeToggle.addEventListener("change", updateStatsSettings);
@@ -1480,6 +1484,18 @@ function saveState() {
 
 function getPerformer() {
   return els.performerInput.value.trim() || state.defaultPerformer || "Me";
+}
+
+async function pasteClipboardToInput(input, label) {
+  try {
+    const text = await navigator.clipboard.readText();
+    input.value = text.trim();
+    input.focus();
+    showNotice(`${label} pasted.`);
+  } catch (error) {
+    console.error(error);
+    showNotice("Clipboard paste was blocked. Use Ctrl+V in the field.");
+  }
 }
 
 function toggleTheme() {

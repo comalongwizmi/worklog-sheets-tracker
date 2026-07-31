@@ -125,6 +125,17 @@ h2 {
   color: white;
 }
 
+.secondary-button {
+  background: var(--panel);
+  border-color: var(--line);
+  color: var(--text);
+}
+
+.secondary-button:hover {
+  background: var(--accent);
+  color: white;
+}
+
 .entry-layout {
   align-items: start;
   display: grid;
@@ -263,6 +274,17 @@ label {
   display: grid;
   gap: 10px;
   grid-template-columns: 1fr auto;
+}
+
+.credential-row {
+  align-items: start;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: 1fr auto;
+}
+
+.credential-row input {
+  margin-bottom: 12px;
 }
 
 input,
@@ -518,6 +540,10 @@ details[open] summary {
   }
 
   .input-row {
+    grid-template-columns: 1fr;
+  }
+
+  .credential-row {
     grid-template-columns: 1fr;
   }
 
