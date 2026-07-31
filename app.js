@@ -7,6 +7,7 @@ const GOOGLE_SCOPES = [
 const SHEETS_DISCOVERY_DOC = "https://sheets.googleapis.com/$discovery/rest?version=v4";
 const DRIVE_DISCOVERY_DOC = "https://www.googleapis.com/discovery/v1/apis/drive/v3/rest";
 const GOOGLE_SCOPE_VERSION = "sheets-drive-v1";
+const APP_VERSION = "2026-08-01-login-debug-2";
 const APP_CONFIG = window.TASK_TRACKER_CONFIG || {};
 
 const state = loadState();
@@ -1250,15 +1251,33 @@ function requestToken(interactive, forceConsent = false) {
 function formatGoogleError(error) {
   if (!error) return "Unknown Google error";
   if (typeof error === "string") return error;
+  if (error instanceof Event) return `Could not load ${error.target?.src || "Google script"}`;
+  if (error.message && error.message !== "[object Object]") return error.message;
+  if (error.status && error.statusText) return `${error.status} ${error.statusText}`;
+  if (error.result?.error) return formatGoogleError(error.result.error);
+  if (error.body) {
+    try {
+      return formatGoogleError(JSON.parse(error.body));
+    } catch {
+      return String(error.body);
+    }
+  }
   const parts = [
     error.error,
+    error.code,
+    error.status,
     error.details,
     error.error_description,
-    error.message
-  ].filter(Boolean);
+    error.message,
+    error.reason
+  ].filter((part) => part && part !== "[object Object]").map((part) => {
+    if (typeof part === "object") return formatGoogleError(part);
+    return String(part);
+  });
   if (parts.length) return parts.join(": ");
   try {
-    return JSON.stringify(error);
+    const json = JSON.stringify(error);
+    return json && json !== "{}" ? json : Object.prototype.toString.call(error);
   } catch {
     return String(error);
   }
@@ -1809,7 +1828,7 @@ function applyTheme() {
 }
 
 function setSyncStatus(message) {
-  els.syncStatus.textContent = message;
+  els.syncStatus.textContent = `${message} (${APP_VERSION})`;
 }
 
 function getGoogleClientId() {
