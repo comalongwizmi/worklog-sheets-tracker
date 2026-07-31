@@ -5,9 +5,8 @@ const GOOGLE_SCOPES = [
   "https://www.googleapis.com/auth/drive.metadata.readonly"
 ].join(" ");
 const SHEETS_DISCOVERY_DOC = "https://sheets.googleapis.com/$discovery/rest?version=v4";
-const DRIVE_DISCOVERY_DOC = "https://www.googleapis.com/discovery/v1/apis/drive/v3/rest";
 const GOOGLE_SCOPE_VERSION = "sheets-drive-v1";
-const APP_VERSION = "2026-08-01-login-debug-2";
+const APP_VERSION = "2026-08-01-drive-rest-1";
 const APP_CONFIG = window.TASK_TRACKER_CONFIG || {};
 
 const state = loadState();
@@ -1209,13 +1208,13 @@ async function renameSpreadsheet(spreadsheetId, title) {
 }
 
 async function initializeGoogle() {
-  if (googleReady && window.gapi?.client?.sheets && window.gapi?.client?.drive && tokenClient) return;
+  if (googleReady && window.gapi?.client?.sheets && tokenClient) return;
   await loadScript("https://apis.google.com/js/api.js");
   await loadScript("https://accounts.google.com/gsi/client");
   await new Promise((resolve) => gapi.load("client", resolve));
   await gapi.client.init({
     apiKey: getGoogleApiKey(),
-    discoveryDocs: [SHEETS_DISCOVERY_DOC, DRIVE_DISCOVERY_DOC]
+    discoveryDocs: [SHEETS_DISCOVERY_DOC]
   });
   initTokenClient();
   googleReady = true;
@@ -1280,6 +1279,15 @@ function formatGoogleError(error) {
     return json && json !== "{}" ? json : Object.prototype.toString.call(error);
   } catch {
     return String(error);
+  }
+}
+
+async function readGoogleRestError(response) {
+  try {
+    const body = await response.json();
+    return body.error || body;
+  } catch {
+    return `${response.status} ${response.statusText}`;
   }
 }
 
@@ -1578,13 +1586,22 @@ async function browseGoogleTables(interactive) {
   if (!(await ensureGoogleAccountConnected(interactive))) return;
   setSyncStatus("Loading Google Sheets...");
   try {
-    const response = await gapi.client.drive.files.list({
+    const params = new URLSearchParams({
       q: "mimeType='application/vnd.google-apps.spreadsheet' and trashed=false",
       fields: "files(id,name,modifiedTime)",
       orderBy: "modifiedTime desc",
-      pageSize: 50
+      pageSize: "50"
     });
-    const tables = response.result.files || [];
+    const response = await fetch(`https://www.googleapis.com/drive/v3/files?${params}`, {
+      headers: {
+        Authorization: `Bearer ${gapi.client.getToken()?.access_token || ""}`
+      }
+    });
+    if (!response.ok) {
+      throw await readGoogleRestError(response);
+    }
+    const result = await response.json();
+    const tables = result.files || [];
     mergeKnownTables(tables);
     saveState();
     renderSavedTables();
