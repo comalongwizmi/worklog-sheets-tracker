@@ -6,7 +6,7 @@ const GOOGLE_SCOPES = [
 ].join(" ");
 const SHEETS_DISCOVERY_DOC = "https://sheets.googleapis.com/$discovery/rest?version=v4";
 const GOOGLE_SCOPE_VERSION = "sheets-drive-v1";
-const APP_VERSION = "2026-08-01-drive-rest-1";
+const APP_VERSION = "2026-08-01-modal-close-1";
 const APP_CONFIG = window.TASK_TRACKER_CONFIG || {};
 
 const state = loadState();
@@ -104,7 +104,6 @@ const els = {
   statsPeriodLabel: document.querySelector("#statsPeriodLabel"),
   themeButton: document.querySelector("#themeButton"),
   typeDialog: document.querySelector("#typeDialog"),
-  useSavedTableButton: document.querySelector("#useSavedTableButton"),
   newTableButton: document.querySelector("#newTableButton"),
   renameTableButton: document.querySelector("#renameTableButton"),
   renameTableInput: document.querySelector("#renameTableInput"),
@@ -144,6 +143,7 @@ els.pasteClientIdButton.addEventListener("click", () => pasteClipboardToInput(el
 els.pasteApiKeyButton.addEventListener("click", () => pasteClipboardToInput(els.apiKeyInput, "API key"));
 els.clientIdInput.addEventListener("paste", handleCredentialsFieldPaste);
 els.apiKeyInput.addEventListener("paste", handleCredentialsFieldPaste);
+els.setupDialog.addEventListener("click", closeSetupFromBackdrop);
 els.statsMonthInput.addEventListener("change", updateStatsSettings);
 els.statsHalfSelect.addEventListener("change", updateStatsSettings);
 els.statsLastThreeToggle.addEventListener("change", updateStatsSettings);
@@ -1579,6 +1579,13 @@ function parseSpreadsheetId(value) {
 function showSetup() {
   hydrateSetupFields();
   els.setupDialog.showModal();
+}
+
+function closeSetupFromBackdrop(event) {
+  if (event.target !== els.setupDialog) return;
+  saveSetupInputs();
+  saveState();
+  els.setupDialog.close();
 }
 
 async function browseGoogleTables(interactive) {

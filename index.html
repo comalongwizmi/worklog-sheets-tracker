@@ -253,7 +253,10 @@
 
     <dialog id="setupDialog">
       <form method="dialog" id="setupForm">
-        <h2>Google Sheets</h2>
+        <div class="dialog-title-row">
+          <h2>Google Sheets</h2>
+          <button id="closeSetupButton" class="icon-button" value="close" type="submit" aria-label="Close settings" title="Close">X</button>
+        </div>
         <p class="setup-copy">Connect now or keep using local storage and connect later.</p>
 
         <details id="developerSettings" open>
@@ -289,12 +292,11 @@
           <label for="spreadsheetIdInput">Spreadsheet URL or ID</label>
           <input id="spreadsheetIdInput" type="text" placeholder="Paste a Google Sheet link or ID">
 
-          <div class="dialog-actions split">
-            <button id="browseTablesButton" class="secondary-button" type="button">Browse tables</button>
+          <label for="savedTablesSelect">Existing Google Sheets</label>
+          <div class="dialog-actions split compact-actions">
+            <button id="browseTablesButton" class="secondary-button" type="button">Update list</button>
             <button id="connectButton" value="connect" type="submit">Connect selected/link</button>
           </div>
-
-          <label for="savedTablesSelect">Existing Google Sheets</label>
           <select id="savedTablesSelect" size="7"></select>
         </fieldset>
 
@@ -314,7 +316,7 @@
       </form>
     </dialog>
 
-    <script src="app.js?v=2026-08-01-drive-rest-1"></script>
+    <script src="app.js?v=2026-08-01-modal-close-1"></script>
   </body>
 </html>
 

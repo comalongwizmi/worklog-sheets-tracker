@@ -456,6 +456,18 @@ dialog {
   width: calc(100% - 28px);
 }
 
+.dialog-title-row {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.dialog-title-row h2 {
+  margin: 0;
+}
+
 .wide-dialog {
   max-width: 760px;
 }
@@ -509,6 +521,10 @@ details[open] summary {
 
 .dialog-actions.split {
   justify-content: space-between;
+}
+
+.compact-actions {
+  margin: 0 0 8px;
 }
 
 .rate-grid {
