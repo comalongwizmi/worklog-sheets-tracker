@@ -6,6 +6,7 @@ const GOOGLE_SCOPES = [
 ].join(" ");
 const SHEETS_DISCOVERY_DOC = "https://sheets.googleapis.com/$discovery/rest?version=v4";
 const DRIVE_DISCOVERY_DOC = "https://www.googleapis.com/discovery/v1/apis/drive/v3/rest";
+const GOOGLE_SCOPE_VERSION = "sheets-drive-v1";
 const APP_CONFIG = window.TASK_TRACKER_CONFIG || {};
 
 const state = loadState();
@@ -873,7 +874,7 @@ async function createNewTableFromSetup() {
     await pullAndSync(false);
     showNotice("New table created.");
   } catch (error) {
-    state.google.lastError = error.message || String(error);
+    state.google.lastError = formatGoogleError(error);
     saveState();
     setSyncStatus(`Create table failed: ${state.google.lastError}`);
     console.error(error);
@@ -900,7 +901,7 @@ async function renameCurrentTableFromSetup() {
     hydrateSetupFields();
     showNotice("Table renamed.");
   } catch (error) {
-    state.google.lastError = error.message || String(error);
+    state.google.lastError = formatGoogleError(error);
     saveState();
     setSyncStatus(`Rename failed: ${state.google.lastError}`);
     console.error(error);
@@ -917,18 +918,25 @@ async function ensureGoogleAccountConnected(interactive) {
   try {
     await initializeGoogle();
     setSyncStatus(interactive ? "Waiting for Google login..." : "Refreshing Google login...");
-    const token = await requestToken(interactive);
+    const token = await requestToken(interactive, state.google.scopeVersion !== GOOGLE_SCOPE_VERSION);
+    if (token?.error) {
+      state.google.lastError = token.error;
+      saveState();
+      setSyncStatus(`Google login failed: ${state.google.lastError}`);
+      return false;
+    }
     if (!token) {
       setSyncStatus("Google login was cancelled");
       return false;
     }
     state.google.hasGrantedAccess = true;
+    state.google.scopeVersion = GOOGLE_SCOPE_VERSION;
     state.google.lastError = "";
     saveState();
     hydrateSetupFields();
     return true;
   } catch (error) {
-    state.google.lastError = error.message || String(error);
+    state.google.lastError = formatGoogleError(error);
     saveState();
     setSyncStatus(`Google login failed: ${state.google.lastError}`);
     console.error(error);
@@ -995,7 +1003,7 @@ async function syncTask(task) {
     await applySheetRowReviewStyle(task);
   } catch (error) {
     task.synced = false;
-    state.google.lastError = error.message || String(error);
+    state.google.lastError = formatGoogleError(error);
     console.error(error);
   }
   saveState();
@@ -1024,11 +1032,15 @@ async function ensureGoogleAuthorized(interactive) {
     if (Date.now() < accessTokenExpiresAt - 60000 && gapi.client.getToken()) {
       return true;
     }
-    const token = await requestToken(interactive);
-    return Boolean(token);
+    const token = await requestToken(interactive, state.google.scopeVersion !== GOOGLE_SCOPE_VERSION);
+    if (token?.error) {
+      if (interactive) setSyncStatus(`Google login failed: ${token.error}`);
+      return false;
+    }
+    return Boolean(token?.accessToken);
   } catch (error) {
     if (interactive) {
-      state.google.lastError = error.message || String(error);
+      state.google.lastError = formatGoogleError(error);
       setSyncStatus(`Google setup failed: ${state.google.lastError}`);
     }
     saveState();
@@ -1216,23 +1228,40 @@ function initTokenClient() {
   });
 }
 
-function requestToken(interactive) {
+function requestToken(interactive, forceConsent = false) {
   return new Promise((resolve) => {
     tokenClient.callback = (response) => {
       if (response.error) {
-        resolve(null);
+        resolve({ error: formatGoogleError(response) });
         return;
       }
       if (response.access_token) {
         accessTokenExpiresAt = Date.now() + Number(response.expires_in || 3600) * 1000;
       }
-      resolve(response.access_token || null);
+      resolve(response.access_token ? { accessToken: response.access_token } : null);
     };
     const prompt = interactive
-      ? (state.google.hasGrantedAccess ? "" : "consent")
+      ? (forceConsent || !state.google.hasGrantedAccess ? "consent" : "")
       : "";
     tokenClient.requestAccessToken({ prompt });
   });
+}
+
+function formatGoogleError(error) {
+  if (!error) return "Unknown Google error";
+  if (typeof error === "string") return error;
+  const parts = [
+    error.error,
+    error.details,
+    error.error_description,
+    error.message
+  ].filter(Boolean);
+  if (parts.length) return parts.join(": ");
+  try {
+    return JSON.stringify(error);
+  } catch {
+    return String(error);
+  }
 }
 
 function loadScript(src) {
@@ -1542,7 +1571,7 @@ async function browseGoogleTables(interactive) {
     renderSavedTables();
     setSyncStatus(`Loaded ${tables.length} Google Sheets.`);
   } catch (error) {
-    state.google.lastError = error.message || String(error);
+    state.google.lastError = formatGoogleError(error);
     saveState();
     setSyncStatus(`Browse failed: ${state.google.lastError}`);
     console.error(error);
