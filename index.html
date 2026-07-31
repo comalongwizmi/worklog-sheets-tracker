@@ -39,7 +39,7 @@
           </div>
 
           <label for="performerInput" class="performer-label">Person</label>
-          <input id="performerInput" type="text" autocomplete="off" placeholder="Me, or comma-separated names">
+          <input id="performerInput" type="text" autocomplete="off" placeholder="Alex, or comma-separated names">
 
           <div id="activeTask" class="active-task" hidden></div>
         </div>
@@ -61,6 +61,11 @@
             <input id="statsLastThreeToggle" type="checkbox">
             <span>Last 3 months</span>
           </label>
+
+          <label class="check-row">
+            <input id="privacyModeToggle" type="checkbox">
+            <span>Privacy: hide sums over 40,000</span>
+          </label>
         </div>
 
         <div class="stats-summary">
@@ -80,6 +85,7 @@
 
         <div id="statsChart" class="stats-chart"></div>
         <div id="statsBreakdown" class="stats-breakdown"></div>
+        <div id="statsDetails" class="stats-details"></div>
       </section>
 
       <section class="history-section">
@@ -146,7 +152,7 @@
         <input id="manualNameInput" type="text" required>
 
         <label for="manualPerformerInput">Person</label>
-        <input id="manualPerformerInput" type="text" placeholder="Me, or comma-separated names">
+        <input id="manualPerformerInput" type="text" placeholder="Alex, or comma-separated names">
 
         <label for="manualTypeInput">Type</label>
         <select id="manualTypeInput" required>
@@ -268,26 +274,42 @@
           </div>
         </details>
 
-        <label for="sheetNameInput">Table name</label>
-        <input id="sheetNameInput" type="text" value="Task Time Tracker">
+        <button id="connectGoogleAccountButton" class="full-button" type="button">Connect Google account</button>
+        <p id="googleAccountStatus" class="setup-copy">Google account is not connected yet.</p>
 
-        <label for="spreadsheetIdInput">Existing spreadsheet URL or ID</label>
-        <input id="spreadsheetIdInput" type="text" placeholder="Leave empty to create a new table">
+        <fieldset class="setup-group">
+          <legend>Create new table</legend>
+          <label for="sheetNameInput">Table name</label>
+          <input id="sheetNameInput" type="text" value="Task Time Tracker">
+          <button id="newTableButton" class="full-button" type="button">Create new table</button>
+        </fieldset>
 
-        <label for="savedTablesSelect">Saved tables</label>
-        <select id="savedTablesSelect"></select>
+        <fieldset class="setup-group">
+          <legend>Connect to existing table</legend>
+          <label for="spreadsheetIdInput">Spreadsheet URL or ID</label>
+          <input id="spreadsheetIdInput" type="text" placeholder="Paste a Google Sheet link or ID">
 
-        <div class="dialog-actions split">
-          <button id="useSavedTableButton" value="use-table" type="button">Use selected</button>
-          <button id="newTableButton" value="new-table" type="button">New table</button>
-        </div>
+          <div class="dialog-actions split">
+            <button id="browseTablesButton" class="secondary-button" type="button">Browse tables</button>
+            <button id="connectButton" value="connect" type="submit">Connect selected/link</button>
+          </div>
+
+          <label for="savedTablesSelect">Existing Google Sheets</label>
+          <select id="savedTablesSelect" size="7"></select>
+        </fieldset>
+
+        <fieldset class="setup-group">
+          <legend>Rename current table</legend>
+          <label for="renameTableInput">New table name</label>
+          <input id="renameTableInput" type="text" placeholder="Only for renaming the connected table">
+          <button id="renameTableButton" class="secondary-button full-button" type="button">Rename current table</button>
+        </fieldset>
 
         <label for="defaultPerformerInput">Default person</label>
-        <input id="defaultPerformerInput" type="text" placeholder="Your name">
+        <input id="defaultPerformerInput" type="text" placeholder="Alex">
 
         <div class="dialog-actions split">
           <button id="laterButton" value="later" type="submit">Connect later</button>
-          <button id="connectButton" value="connect" type="submit">Connect</button>
         </div>
       </form>
     </dialog>

@@ -1,7 +1,11 @@
 ﻿const STORAGE_KEY = "task-time-tracker-state";
 const SHEET_HEADERS = ["Start", "End", "Person", "Task", "Type", "Rate", "Duration", "Status", "ID"];
-const GOOGLE_SCOPES = "https://www.googleapis.com/auth/spreadsheets";
-const DISCOVERY_DOC = "https://sheets.googleapis.com/$discovery/rest?version=v4";
+const GOOGLE_SCOPES = [
+  "https://www.googleapis.com/auth/spreadsheets",
+  "https://www.googleapis.com/auth/drive.metadata.readonly"
+].join(" ");
+const SHEETS_DISCOVERY_DOC = "https://sheets.googleapis.com/$discovery/rest?version=v4";
+const DRIVE_DISCOVERY_DOC = "https://www.googleapis.com/discovery/v1/apis/drive/v3/rest";
 const APP_CONFIG = window.TASK_TRACKER_CONFIG || {};
 
 const state = loadState();
@@ -28,7 +32,9 @@ const els = {
   bulkTaskDialog: document.querySelector("#bulkTaskDialog"),
   bulkTaskForm: document.querySelector("#bulkTaskForm"),
   bulkTextInput: document.querySelector("#bulkTextInput"),
+  browseTablesButton: document.querySelector("#browseTablesButton"),
   clientIdInput: document.querySelector("#clientIdInput"),
+  connectGoogleAccountButton: document.querySelector("#connectGoogleAccountButton"),
   connectButton: document.querySelector("#connectButton"),
   copyFirstHalfButton: document.querySelector("#copyFirstHalfButton"),
   copySecondHalfButton: document.querySelector("#copySecondHalfButton"),
@@ -52,6 +58,7 @@ const els = {
   exportFromInput: document.querySelector("#exportFromInput"),
   exportToInput: document.querySelector("#exportToInput"),
   halfMonthInput: document.querySelector("#halfMonthInput"),
+  googleAccountStatus: document.querySelector("#googleAccountStatus"),
   laterButton: document.querySelector("#laterButton"),
   manualEndInput: document.querySelector("#manualEndInput"),
   manualNameInput: document.querySelector("#manualNameInput"),
@@ -70,6 +77,7 @@ const els = {
   pasteGoogleCredentialsButton: document.querySelector("#pasteGoogleCredentialsButton"),
   performerInput: document.querySelector("#performerInput"),
   personalTypeButton: document.querySelector("#personalTypeButton"),
+  privacyModeToggle: document.querySelector("#privacyModeToggle"),
   customRateInput: document.querySelector("#customRateInput"),
   rateDialog: document.querySelector("#rateDialog"),
   rateForm: document.querySelector("#rateForm"),
@@ -88,6 +96,7 @@ const els = {
   taskRows: document.querySelector("#taskRows"),
   statsBreakdown: document.querySelector("#statsBreakdown"),
   statsChart: document.querySelector("#statsChart"),
+  statsDetails: document.querySelector("#statsDetails"),
   statsHalfSelect: document.querySelector("#statsHalfSelect"),
   statsLastThreeToggle: document.querySelector("#statsLastThreeToggle"),
   statsMonthInput: document.querySelector("#statsMonthInput"),
@@ -96,6 +105,8 @@ const els = {
   typeDialog: document.querySelector("#typeDialog"),
   useSavedTableButton: document.querySelector("#useSavedTableButton"),
   newTableButton: document.querySelector("#newTableButton"),
+  renameTableButton: document.querySelector("#renameTableButton"),
+  renameTableInput: document.querySelector("#renameTableInput"),
   newTaskButton: document.querySelector("#newTaskButton")
 };
 
@@ -121,14 +132,21 @@ els.syncButton.addEventListener("click", () => pullAndSync(true));
 els.stopButton.addEventListener("click", stopCurrentTask);
 els.settingsButton.addEventListener("click", showSetup);
 els.themeButton.addEventListener("click", toggleTheme);
-els.useSavedTableButton.addEventListener("click", useSelectedSavedTable);
-els.newTableButton.addEventListener("click", prepareNewTable);
+els.connectGoogleAccountButton.addEventListener("click", connectGoogleAccount);
+els.browseTablesButton.addEventListener("click", () => browseGoogleTables(true));
+els.newTableButton.addEventListener("click", createNewTableFromSetup);
+els.renameTableButton.addEventListener("click", renameCurrentTableFromSetup);
+els.savedTablesSelect.addEventListener("change", hydrateSelectedBrowseTable);
+els.savedTablesSelect.addEventListener("dblclick", useSelectedSavedTable);
 els.pasteGoogleCredentialsButton.addEventListener("click", pasteGoogleCredentials);
 els.pasteClientIdButton.addEventListener("click", () => pasteClipboardToInput(els.clientIdInput, "OAuth Client ID"));
 els.pasteApiKeyButton.addEventListener("click", () => pasteClipboardToInput(els.apiKeyInput, "API key"));
+els.clientIdInput.addEventListener("paste", handleCredentialsFieldPaste);
+els.apiKeyInput.addEventListener("paste", handleCredentialsFieldPaste);
 els.statsMonthInput.addEventListener("change", updateStatsSettings);
 els.statsHalfSelect.addEventListener("change", updateStatsSettings);
 els.statsLastThreeToggle.addEventListener("change", updateStatsSettings);
+els.privacyModeToggle.addEventListener("change", updateStatsSettings);
 els.taskInput.addEventListener("keydown", (event) => {
   if (event.key === "Enter") startRequested(state.activeTask ? "replace" : "primary");
 });
@@ -136,17 +154,11 @@ els.taskInput.addEventListener("keydown", (event) => {
 els.setupForm.addEventListener("submit", async (event) => {
   const action = event.submitter?.value;
   state.setupSeen = true;
-  state.google.clientId = els.clientIdInput.value.trim();
-  state.google.apiKey = els.apiKeyInput.value.trim();
-  state.google.sheetName = els.sheetNameInput.value.trim() || "Task Time Tracker";
-  state.google.spreadsheetId = parseSpreadsheetId(els.spreadsheetIdInput.value.trim());
-  state.defaultPerformer = els.defaultPerformerInput.value.trim() || state.defaultPerformer || "Me";
-  saveState();
-  hydrateSetupFields();
+  saveSetupInputs();
 
   if (action === "connect") {
     event.preventDefault();
-    await connectGoogle();
+    await connectExistingTableFromSetup();
     els.setupDialog.close();
   }
   render();
@@ -317,54 +329,111 @@ function renderStats() {
   const period = getSelectedStatsPeriod();
   const tasks = getFinishedTasksInRange(period.from, period.to);
   const paidTasks = tasks.filter((task) => task.type === "paid");
+  const personalTasks = tasks.filter((task) => task.type === "personal");
   const earned = paidTasks.reduce((total, task) => total + calculateTaskEarnings(task), 0);
   const hours = paidTasks.reduce((total, task) => total + Number(task.durationMs || 0) / 3600000, 0);
-  els.currentHalfMonthEarnings.textContent = `${formatMoney(earned)} RUB`;
+  const totalHours = tasks.reduce((total, task) => total + Number(task.durationMs || 0) / 3600000, 0);
+  const personalHours = personalTasks.reduce((total, task) => total + Number(task.durationMs || 0) / 3600000, 0);
+  els.currentHalfMonthEarnings.textContent = formatPrivateMoney(earned);
   els.currentHalfMonthPeriod.textContent = `${formatDateOnly(period.from)} - ${formatDateOnly(period.to)}`;
-  els.currentHalfMonthHours.textContent = `${formatMoney(hours)}h`;
+  els.currentHalfMonthHours.textContent = `${formatMoney(hours)}h paid / ${formatMoney(totalHours)}h total`;
   els.statsPeriodLabel.textContent = period.label;
-  renderStatsBreakdown(buildStatsBreakdown(paidTasks));
+  renderStatsBreakdown(buildStatsReport(tasks, paidTasks, personalHours));
 }
 
-function renderStatsBreakdown(items) {
+function renderStatsBreakdown(report) {
   els.statsChart.innerHTML = "";
   els.statsBreakdown.innerHTML = "";
-  if (!items.length) {
-    els.statsChart.innerHTML = `<div class="bulk-preview-note">No paid finished tasks in this period.</div>`;
+  els.statsDetails.innerHTML = "";
+  if (!report.totalCount) {
+    els.statsChart.innerHTML = `<div class="bulk-preview-note">No finished tasks in this period.</div>`;
     return;
   }
-  const maxEarned = Math.max(...items.map((item) => item.earned));
-  for (const item of items) {
+  if (!report.work.length) {
+    els.statsChart.innerHTML = `<div class="bulk-preview-note">No paid finished tasks in this period.</div>`;
+  }
+  const maxEarned = Math.max(...report.work.map((item) => item.earned), 0);
+  for (const item of report.work.slice(0, 8)) {
     const chartRow = document.createElement("div");
     chartRow.className = "chart-row";
     chartRow.innerHTML = `
       <div class="chart-label">${escapeHtml(item.name)}</div>
       <div class="chart-track"><div class="chart-fill" style="width: ${maxEarned ? (item.earned / maxEarned) * 100 : 0}%"></div></div>
-      <div class="chart-value">${formatMoney(item.earned)} RUB</div>
+      <div class="chart-value">${formatPrivateMoney(item.earned)} / ${formatMoney(item.hours)}h</div>
     `;
     els.statsChart.append(chartRow);
-
-    const breakdownRow = document.createElement("div");
-    breakdownRow.className = "breakdown-row";
-    breakdownRow.innerHTML = `
-      <div>${escapeHtml(item.name)}</div>
-      <div>${formatMoney(item.hours)}h</div>
-      <div>${formatMoney(item.earned)} RUB</div>
-    `;
-    els.statsBreakdown.append(breakdownRow);
   }
+  els.statsBreakdown.innerHTML = `
+    <div class="stat-pill"><span>Paid tasks</span><strong>${report.paidCount}</strong></div>
+    <div class="stat-pill"><span>Paid hours</span><strong>${formatMoney(report.paidHours)}h</strong></div>
+    <div class="stat-pill"><span>Personal hours</span><strong>${formatMoney(report.personalHours)}h</strong></div>
+    <div class="stat-pill"><span>Average paid rate</span><strong>${formatMoney(report.averageRate)} RUB/h</strong></div>
+    <div class="stat-pill"><span>Best work</span><strong>${escapeHtml(report.bestWork?.name || "-")}</strong></div>
+    <div class="stat-pill"><span>Needs review</span><strong>${report.needsReview}</strong></div>
+  `;
+  els.statsDetails.innerHTML = [
+    renderStatsTable("By work", ["Work", "Tasks", "Hours", "Earned", "Avg"], report.work),
+    renderStatsTable("By person", ["Person", "Tasks", "Hours", "Earned", "Avg"], report.people),
+    renderStatsTable("By rate", ["Rate", "Tasks", "Hours", "Earned", "Avg"], report.rates)
+  ].join("");
 }
 
-function buildStatsBreakdown(tasks) {
-  const byName = new Map();
+function buildStatsReport(tasks, paidTasks, personalHours) {
+  const work = aggregateStats(paidTasks, (task) => task.name || "Unnamed");
+  const people = aggregateStats(paidTasks, (task) => task.performer || state.defaultPerformer || "Alex");
+  const rates = aggregateStats(paidTasks, (task) => `${Number(task.rateRubPerHour || 0)} RUB/h`);
+  const paidHours = paidTasks.reduce((total, task) => total + Number(task.durationMs || 0) / 3600000, 0);
+  const earned = paidTasks.reduce((total, task) => total + calculateTaskEarnings(task), 0);
+  return {
+    work,
+    people,
+    rates,
+    totalCount: tasks.length,
+    paidCount: paidTasks.length,
+    paidHours,
+    personalHours,
+    averageRate: paidHours ? earned / paidHours : 0,
+    bestWork: work[0] || null,
+    needsReview: tasks.filter((task) => task.reviewStatus === "needs_review").length
+  };
+}
+
+function aggregateStats(tasks, getKey) {
+  const byKey = new Map();
   for (const task of tasks) {
-    const name = task.name || "Unnamed";
-    const current = byName.get(name) || { name, hours: 0, earned: 0 };
-    current.hours += Number(task.durationMs || 0) / 3600000;
+    const name = getKey(task);
+    const current = byKey.get(name) || { name, count: 0, hours: 0, earned: 0, averageRate: 0 };
+    const hours = Number(task.durationMs || 0) / 3600000;
+    current.count += 1;
+    current.hours += hours;
     current.earned += calculateTaskEarnings(task);
-    byName.set(name, current);
+    current.averageRate = current.hours ? current.earned / current.hours : 0;
+    byKey.set(name, current);
   }
-  return [...byName.values()].sort((a, b) => b.earned - a.earned);
+  return [...byKey.values()].sort((a, b) => b.earned - a.earned || b.hours - a.hours);
+}
+
+function renderStatsTable(title, headers, rows) {
+  if (!rows.length) return "";
+  return `
+    <section class="stats-table-section">
+      <h3>${escapeHtml(title)}</h3>
+      <table class="stats-table">
+        <thead><tr>${headers.map((header) => `<th>${escapeHtml(header)}</th>`).join("")}</tr></thead>
+        <tbody>
+          ${rows.map((row) => `
+            <tr>
+              <td>${escapeHtml(row.name)}</td>
+              <td>${row.count}</td>
+              <td>${formatMoney(row.hours)}h</td>
+              <td>${formatPrivateMoney(row.earned)}</td>
+              <td>${formatMoney(row.averageRate)} RUB/h</td>
+            </tr>
+          `).join("")}
+        </tbody>
+      </table>
+    </section>
+  `;
 }
 
 function renderActiveTask() {
@@ -673,6 +742,7 @@ function hydrateStatsControls() {
   state.stats.month ||= currentMonth;
   state.stats.half ||= new Date().getDate() <= 15 ? "first" : "second";
   state.stats.lastThreeMonths ||= false;
+  state.stats.privacyMode ||= false;
   if (els.statsMonthInput.value !== state.stats.month) {
     els.statsMonthInput.value = state.stats.month;
   }
@@ -680,6 +750,7 @@ function hydrateStatsControls() {
     els.statsHalfSelect.value = state.stats.half;
   }
   els.statsLastThreeToggle.checked = Boolean(state.stats.lastThreeMonths);
+  els.privacyModeToggle.checked = Boolean(state.stats.privacyMode);
   els.statsHalfSelect.disabled = Boolean(state.stats.lastThreeMonths);
 }
 
@@ -687,12 +758,13 @@ function updateStatsSettings() {
   state.stats.month = els.statsMonthInput.value || formatDateInput(new Date()).slice(0, 7);
   state.stats.half = els.statsHalfSelect.value || "first";
   state.stats.lastThreeMonths = els.statsLastThreeToggle.checked;
+  state.stats.privacyMode = els.privacyModeToggle.checked;
   saveState();
   renderStats();
 }
 
 function formatHalfMonthExport(tasks) {
-  const performer = tasks[0]?.performer || state.defaultPerformer || "Me";
+  const performer = tasks[0]?.performer || state.defaultPerformer || "Alex";
   const lines = tasks.map((task) => {
     const start = new Date(task.startIso);
     const end = new Date(task.endIso);
@@ -746,39 +818,121 @@ function showNotice(message) {
 }
 
 async function connectGoogle() {
-  if (!getGoogleClientId() || !getGoogleApiKey()) {
-    els.developerSettings.open = true;
-    alert("Paste your Google OAuth Client ID and API key in Google credentials, then connect again.");
+  await connectExistingTableFromSetup();
+}
+
+async function connectGoogleAccount() {
+  saveSetupInputs();
+  if (!(await ensureGoogleAccountConnected(true))) return false;
+  await browseGoogleTables(false);
+  showNotice("Google account connected.");
+  return true;
+}
+
+async function connectExistingTableFromSetup() {
+  saveSetupInputs();
+  if (!(await ensureGoogleAccountConnected(true))) return;
+  const selected = getSelectedBrowseTable();
+  const spreadsheetId = parseSpreadsheetId(els.spreadsheetIdInput.value.trim()) || selected?.id || "";
+  if (!spreadsheetId) {
+    showNotice("Paste a Sheet link/ID or choose a table from the list.");
     return;
   }
-  setSyncStatus("Preparing Google login...");
+  const sheetName = selected?.name || await getSpreadsheetTitle(spreadsheetId).catch(() => spreadsheetId);
+  persistCurrentTableTasks();
+  state.google.spreadsheetId = spreadsheetId;
+  state.google.sheetName = sheetName;
+  state.google.connected = true;
+  state.google.lastError = "";
+  rememberCurrentTable();
+  loadCurrentTableTasks();
+  saveState();
+  hydrateSetupFields();
+  await ensureHeaders();
+  await pullAndSync(false);
+  showNotice("Table connected.");
+}
+
+async function createNewTableFromSetup() {
+  saveSetupInputs();
+  if (!(await ensureGoogleAccountConnected(true))) return;
+  const title = els.sheetNameInput.value.trim() || "Task Time Tracker";
+  setSyncStatus("Creating Google Sheet...");
   try {
-    await initializeGoogle();
-    setSyncStatus("Waiting for Google login...");
-    const token = await requestToken(true);
-    if (!token) {
-      setSyncStatus("Google login was cancelled");
-      return;
-    }
-    if (!state.google.spreadsheetId) {
-      state.google.spreadsheetId = await createSpreadsheet(state.google.sheetName);
-    } else {
-      await renameSpreadsheet(state.google.spreadsheetId, state.google.sheetName);
-    }
+    persistCurrentTableTasks();
+    state.google.spreadsheetId = await createSpreadsheet(title);
+    state.google.sheetName = title;
     state.google.connected = true;
-    state.google.hasGrantedAccess = true;
     state.google.lastError = "";
+    state.activeTask = null;
+    state.tasks = [];
     rememberCurrentTable();
     saveState();
     hydrateSetupFields();
     await ensureHeaders();
     await pullAndSync(false);
+    showNotice("New table created.");
   } catch (error) {
-    state.google.connected = false;
     state.google.lastError = error.message || String(error);
     saveState();
-    setSyncStatus(`Google setup failed: ${state.google.lastError}`);
+    setSyncStatus(`Create table failed: ${state.google.lastError}`);
     console.error(error);
+  }
+}
+
+async function renameCurrentTableFromSetup() {
+  saveSetupInputs();
+  const title = els.renameTableInput.value.trim();
+  if (!state.google.spreadsheetId) {
+    showNotice("Connect a table before renaming.");
+    return;
+  }
+  if (!title) {
+    showNotice("Enter the new table name first.");
+    return;
+  }
+  if (!(await ensureGoogleAccountConnected(true))) return;
+  try {
+    await renameSpreadsheet(state.google.spreadsheetId, title);
+    state.google.sheetName = title;
+    rememberCurrentTable();
+    saveState();
+    hydrateSetupFields();
+    showNotice("Table renamed.");
+  } catch (error) {
+    state.google.lastError = error.message || String(error);
+    saveState();
+    setSyncStatus(`Rename failed: ${state.google.lastError}`);
+    console.error(error);
+  }
+}
+
+async function ensureGoogleAccountConnected(interactive) {
+  if (!getGoogleClientId() || !getGoogleApiKey()) {
+    els.developerSettings.open = true;
+    alert("Paste your Google OAuth Client ID and API key in Google credentials, then connect again.");
+    return false;
+  }
+  setSyncStatus("Preparing Google login...");
+  try {
+    await initializeGoogle();
+    setSyncStatus(interactive ? "Waiting for Google login..." : "Refreshing Google login...");
+    const token = await requestToken(interactive);
+    if (!token) {
+      setSyncStatus("Google login was cancelled");
+      return false;
+    }
+    state.google.hasGrantedAccess = true;
+    state.google.lastError = "";
+    saveState();
+    hydrateSetupFields();
+    return true;
+  } catch (error) {
+    state.google.lastError = error.message || String(error);
+    saveState();
+    setSyncStatus(`Google login failed: ${state.google.lastError}`);
+    console.error(error);
+    return false;
   }
 }
 
@@ -917,7 +1071,7 @@ async function updateStatsSheet() {
   const durationHoursExpression = "IFERROR((VALUE(LEFT(Tasks!G2:G,FIND(\":\",Tasks!G2:G)-1))+VALUE(MID(Tasks!G2:G,FIND(\":\",Tasks!G2:G)+1,2))/60+VALUE(RIGHT(Tasks!G2:G,2))/3600),0)";
   await gapi.client.sheets.spreadsheets.values.update({
     spreadsheetId: state.google.spreadsheetId,
-    range: "Stats!A1:B9",
+    range: "Stats!A1:B13",
     valueInputOption: "USER_ENTERED",
     resource: {
       values: [
@@ -925,9 +1079,13 @@ async function updateStatsSheet() {
         ["Selected period", period.label],
         ["Period start", `=DATE(${period.from.getFullYear()},${period.from.getMonth() + 1},${period.from.getDate()})`],
         ["Period end", `=DATE(${period.to.getFullYear()},${period.to.getMonth() + 1},${period.to.getDate()})`],
+        ["Finished rows", `=SUMPRODUCT((Tasks!B2:B<>"")*(${taskDateExpression}>=B3)*(${taskDateExpression}<=B4))`],
         ["Paid rows", `=SUMPRODUCT((Tasks!E2:E="Paid")*(${taskDateExpression}>=B3)*(${taskDateExpression}<=B4))`],
         ["Paid hours", `=SUMPRODUCT((Tasks!E2:E="Paid")*(${taskDateExpression}>=B3)*(${taskDateExpression}<=B4)*${durationHoursExpression})`],
+        ["Personal hours", `=SUMPRODUCT((Tasks!E2:E="Personal")*(${taskDateExpression}>=B3)*(${taskDateExpression}<=B4)*${durationHoursExpression})`],
+        ["Total hours", `=SUMPRODUCT((Tasks!B2:B<>"")*(${taskDateExpression}>=B3)*(${taskDateExpression}<=B4)*${durationHoursExpression})`],
         ["Earned RUB", `=SUMPRODUCT((Tasks!E2:E="Paid")*(${taskDateExpression}>=B3)*(${taskDateExpression}<=B4)*Tasks!F2:F*${durationHoursExpression})`],
+        ["Average paid rate", "=IFERROR(B10/B7,0)"],
         ["Needs review", "=COUNTIF(Tasks!H2:H,\"Needs review\")"],
         ["Last updated", "=NOW()"]
       ]
@@ -1007,6 +1165,14 @@ async function getSpreadsheetSheets() {
   return spreadsheet.result.sheets || [];
 }
 
+async function getSpreadsheetTitle(spreadsheetId) {
+  const spreadsheet = await gapi.client.sheets.spreadsheets.get({
+    spreadsheetId,
+    fields: "properties(title)"
+  });
+  return spreadsheet.result.properties?.title || spreadsheetId;
+}
+
 function getPrimaryTaskSheet(sheets) {
   return sheets.find((sheet) => sheet.properties.title === "Tasks")
     || [...sheets].sort((a, b) => a.properties.index - b.properties.index)[0];
@@ -1030,13 +1196,13 @@ async function renameSpreadsheet(spreadsheetId, title) {
 }
 
 async function initializeGoogle() {
-  if (googleReady && window.gapi?.client?.sheets && tokenClient) return;
+  if (googleReady && window.gapi?.client?.sheets && window.gapi?.client?.drive && tokenClient) return;
   await loadScript("https://apis.google.com/js/api.js");
   await loadScript("https://accounts.google.com/gsi/client");
   await new Promise((resolve) => gapi.load("client", resolve));
   await gapi.client.init({
     apiKey: getGoogleApiKey(),
-    discoveryDocs: [DISCOVERY_DOC]
+    discoveryDocs: [SHEETS_DISCOVERY_DOC, DRIVE_DISCOVERY_DOC]
   });
   initTokenClient();
   googleReady = true;
@@ -1100,7 +1266,7 @@ function taskToSheetRow(task) {
 
 function parseBulkText(text) {
   const results = [];
-  let currentPerformer = state.defaultPerformer || "Me";
+  let currentPerformer = state.defaultPerformer || "Alex";
   const lines = text.split(/\r?\n/);
   lines.forEach((rawLine, lineIndex) => {
     const line = rawLine.trim();
@@ -1307,6 +1473,12 @@ function formatMoney(value) {
   });
 }
 
+function formatPrivateMoney(value) {
+  const amount = Number(value || 0);
+  if (state.stats?.privacyMode && amount > 40000) return "Hidden";
+  return `${formatMoney(amount)} RUB`;
+}
+
 function getSheetRowId(row) {
   return row[8] || row[7] || (looksLikeTaskId(row[6]) ? row[6] : "");
 }
@@ -1353,34 +1525,62 @@ function showSetup() {
   els.setupDialog.showModal();
 }
 
+async function browseGoogleTables(interactive) {
+  saveSetupInputs();
+  if (!(await ensureGoogleAccountConnected(interactive))) return;
+  setSyncStatus("Loading Google Sheets...");
+  try {
+    const response = await gapi.client.drive.files.list({
+      q: "mimeType='application/vnd.google-apps.spreadsheet' and trashed=false",
+      fields: "files(id,name,modifiedTime)",
+      orderBy: "modifiedTime desc",
+      pageSize: 50
+    });
+    const tables = response.result.files || [];
+    mergeKnownTables(tables);
+    saveState();
+    renderSavedTables();
+    setSyncStatus(`Loaded ${tables.length} Google Sheets.`);
+  } catch (error) {
+    state.google.lastError = error.message || String(error);
+    saveState();
+    setSyncStatus(`Browse failed: ${state.google.lastError}`);
+    console.error(error);
+  }
+}
+
 function useSelectedSavedTable() {
-  const tableId = els.savedTablesSelect.value;
-  const table = (state.google.tables || []).find((item) => item.id === tableId);
+  const table = getSelectedBrowseTable();
   if (!table) {
     showNotice("No saved table selected.");
     return;
   }
   state.google.spreadsheetId = table.id;
   state.google.sheetName = table.name;
-  state.google.connected = true;
   state.google.lastError = "";
-  loadCurrentTableTasks();
   saveState();
   hydrateSetupFields();
-  render();
-  pullAndSync(true);
+  connectExistingTableFromSetup();
 }
 
-function prepareNewTable() {
-  persistCurrentTableTasks();
-  state.google.spreadsheetId = "";
-  state.google.sheetName = `${state.defaultPerformer || "Tasks"} ${formatDateOnly(new Date())}`;
-  state.activeTask = null;
-  state.tasks = [];
-  saveState();
-  hydrateSetupFields();
-  render();
-  showNotice("Enter a name and press Connect to create the new table.");
+function hydrateSelectedBrowseTable() {
+  const table = getSelectedBrowseTable();
+  if (!table) return;
+  els.spreadsheetIdInput.value = table.id;
+  if (!els.renameTableInput.value.trim()) els.renameTableInput.value = table.name;
+}
+
+function getSelectedBrowseTable() {
+  const tableId = els.savedTablesSelect.value;
+  return (state.google.tables || []).find((item) => item.id === tableId) || null;
+}
+
+function saveSetupInputs() {
+  state.google.clientId = els.clientIdInput.value.trim();
+  state.google.apiKey = els.apiKeyInput.value.trim();
+  state.defaultPerformer = els.defaultPerformerInput.value.trim() || state.defaultPerformer || "Alex";
+  const pastedId = parseSpreadsheetId(els.spreadsheetIdInput.value.trim());
+  if (pastedId) state.google.spreadsheetId = pastedId;
 }
 
 function rememberCurrentTable() {
@@ -1395,6 +1595,24 @@ function rememberCurrentTable() {
     id: state.google.spreadsheetId,
     name: state.google.sheetName || state.google.spreadsheetId
   });
+}
+
+function mergeKnownTables(tables) {
+  state.google.tables ||= [];
+  for (const table of tables) {
+    const existing = state.google.tables.find((item) => item.id === table.id);
+    if (existing) {
+      existing.name = table.name || existing.name;
+      existing.modifiedTime = table.modifiedTime || existing.modifiedTime;
+      continue;
+    }
+    state.google.tables.push({
+      id: table.id,
+      name: table.name || table.id,
+      modifiedTime: table.modifiedTime || ""
+    });
+  }
+  state.google.tables.sort((a, b) => String(b.modifiedTime || "").localeCompare(String(a.modifiedTime || "")));
 }
 
 function persistCurrentTableTasks() {
@@ -1417,10 +1635,14 @@ function hydrateSetupFields() {
   els.apiKeyInput.value = state.google.apiKey || "";
   els.developerSettings.hidden = Boolean(APP_CONFIG.googleClientId && APP_CONFIG.googleApiKey);
   els.sheetNameInput.value = state.google.sheetName || "Task Time Tracker";
+  els.renameTableInput.value = state.google.spreadsheetId ? state.google.sheetName || "" : "";
   els.spreadsheetIdInput.value = state.google.spreadsheetId || "";
   renderSavedTables();
-  els.defaultPerformerInput.value = state.defaultPerformer || "Me";
-  els.performerInput.placeholder = state.defaultPerformer || "Me";
+  els.defaultPerformerInput.value = state.defaultPerformer || "Alex";
+  els.performerInput.placeholder = state.defaultPerformer || "Alex";
+  els.googleAccountStatus.textContent = state.google.hasGrantedAccess
+    ? `Google account connected${state.google.spreadsheetId ? `, table: ${state.google.sheetName || state.google.spreadsheetId}` : ""}.`
+    : "Google account is not connected yet.";
 }
 
 function renderSavedTables() {
@@ -1446,11 +1668,12 @@ function loadState() {
   const fallback = {
     setupSeen: false,
     activeTask: null,
-    defaultPerformer: "Me",
+      defaultPerformer: "Alex",
     stats: {
       month: formatDateInput(new Date()).slice(0, 7),
       half: new Date().getDate() <= 15 ? "first" : "second",
-      lastThreeMonths: false
+      lastThreeMonths: false,
+      privacyMode: false
     },
     theme: "light",
     tasks: [],
@@ -1485,7 +1708,7 @@ function saveState() {
 }
 
 function getPerformer() {
-  return els.performerInput.value.trim() || state.defaultPerformer || "Me";
+  return els.performerInput.value.trim() || state.defaultPerformer || "Alex";
 }
 
 async function pasteClipboardToInput(input, label) {
@@ -1503,28 +1726,45 @@ async function pasteClipboardToInput(input, label) {
 async function pasteGoogleCredentials() {
   try {
     const text = await navigator.clipboard.readText();
-    const lines = text
-      .split(/\r?\n/)
-      .map((line) => line.trim())
-      .filter(Boolean);
-    const clientDomain = ".apps" + ".googleusercontent.com";
-    const apiKeyPrefix = "AI" + "za";
-    const clientId = lines.find((line) => line.includes(clientDomain)) || lines[0] || "";
-    const apiKey = lines.find((line) => line.startsWith(apiKeyPrefix)) || lines.find((line) => line !== clientId) || "";
-
-    if (!clientId || !apiKey) {
-      showNotice("Copy Client ID and API key on separate lines.");
-      return;
-    }
-
-    els.clientIdInput.value = clientId;
-    els.apiKeyInput.value = apiKey;
+    if (!fillGoogleCredentials(text)) return;
     els.apiKeyInput.focus();
     showNotice("Google credentials pasted.");
   } catch (error) {
     console.error(error);
     showNotice("Clipboard paste was blocked. Use Ctrl+V in the fields.");
   }
+}
+
+function handleCredentialsFieldPaste(event) {
+  const text = event.clipboardData?.getData("text") || "";
+  if (!parseGoogleCredentials(text).clientId || !parseGoogleCredentials(text).apiKey) return;
+  event.preventDefault();
+  fillGoogleCredentials(text);
+  showNotice("Google credentials pasted.");
+}
+
+function fillGoogleCredentials(text) {
+  const { clientId, apiKey } = parseGoogleCredentials(text);
+  if (!clientId || !apiKey) {
+    showNotice("Copy Client ID and API key together, then press Paste both credentials.");
+    return false;
+  }
+  els.clientIdInput.value = clientId;
+  els.apiKeyInput.value = apiKey;
+  return true;
+}
+
+function parseGoogleCredentials(text) {
+  const clientDomain = ".apps" + ".googleusercontent.com";
+  const apiKeyPrefix = "AI" + "za";
+  const tokens = text
+    .split(/\s+/)
+    .map((token) => token.trim().replace(/^[<"'`]+|[>"'`,;]+$/g, ""))
+    .filter(Boolean);
+  return {
+    clientId: tokens.find((token) => token.includes(clientDomain)) || "",
+    apiKey: tokens.find((token) => token.startsWith(apiKeyPrefix)) || ""
+  };
 }
 
 function toggleTheme() {
@@ -1552,7 +1792,7 @@ function getGoogleApiKey() {
 }
 
 function migrateState() {
-  state.defaultPerformer ||= "Me";
+  if (!state.defaultPerformer || state.defaultPerformer === "Me") state.defaultPerformer = "Alex";
   state.theme ||= "light";
   state.stats ||= {};
   state.stats.month ||= formatDateInput(new Date()).slice(0, 7);

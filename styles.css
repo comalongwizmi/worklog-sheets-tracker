@@ -214,7 +214,8 @@ h2 {
 }
 
 .stats-chart,
-.stats-breakdown {
+.stats-breakdown,
+.stats-details {
   grid-column: 1 / -1;
 }
 
@@ -252,15 +253,48 @@ h2 {
 .stats-breakdown {
   border-top: 1px solid var(--line);
   display: grid;
-  gap: 6px;
+  gap: 8px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   padding-top: 10px;
 }
 
-.breakdown-row {
+.stat-pill {
+  background: var(--panel-strong);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+}
+
+.stat-pill span {
+  margin-bottom: 6px;
+}
+
+.stat-pill strong {
+  font-size: 15px;
+}
+
+.stats-details {
   display: grid;
+  gap: 12px;
+}
+
+.stats-table-section {
+  overflow-x: auto;
+}
+
+.stats-table-section h3 {
+  font-size: 14px;
+  margin: 0 0 6px;
+}
+
+.stats-table {
+  min-width: 620px;
+}
+
+.stats-table th,
+.stats-table td {
   font-size: 13px;
-  gap: 8px;
-  grid-template-columns: 1fr auto auto;
+  padding: 7px 8px;
 }
 
 label {
@@ -290,6 +324,25 @@ label {
 
 .credential-row input {
   margin-bottom: 12px;
+}
+
+.setup-group {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  margin: 14px 0;
+  padding: 12px;
+}
+
+.setup-group legend {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 650;
+  padding: 0 6px;
+}
+
+#savedTablesSelect {
+  min-height: 180px;
+  padding: 6px;
 }
 
 input,
@@ -564,8 +617,11 @@ details[open] summary {
   }
 
   .stats-summary,
-  .breakdown-row,
   .chart-row {
+    grid-template-columns: 1fr;
+  }
+
+  .stats-breakdown {
     grid-template-columns: 1fr;
   }
 

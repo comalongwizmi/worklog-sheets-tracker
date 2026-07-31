@@ -25,11 +25,12 @@ For this public version, do not commit real Google credentials. The app stores t
 1. Go to Google Cloud Console.
 2. Create or choose a project.
 3. Enable the Google Sheets API.
-4. Create an OAuth 2.0 Client ID for a web application.
-5. Add `http://localhost:8765` to authorized JavaScript origins for local testing.
-6. If deploying to GitHub Pages, also add your Pages origin, for example `https://YOUR_USERNAME.github.io`.
-7. Create an API key in the same project.
-8. Paste both values into the app's Google credentials fields.
+4. Enable the Google Drive API if you want the app to browse existing Sheets from the connect screen.
+5. Create an OAuth 2.0 Client ID for a web application.
+6. Add `http://localhost:8765` to authorized JavaScript origins for local testing.
+7. If deploying to GitHub Pages, also add your Pages origin, for example `https://YOUR_USERNAME.github.io`.
+8. Create an API key in the same project.
+9. Paste both values into the app's Google credentials fields.
 
 The settings dialog always shows Google credentials fields in this public copy.
 
